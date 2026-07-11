@@ -1,106 +1,52 @@
-# ODXProxy Clients — Claude Code Skill
+# ODXProxy — Claude Code Skills
 
-A [Claude Code](https://claude.com/claude-code) **skill** that makes the agent
-effective at building applications against an **Odoo** ERP through
-[ODXProxy](https://odxproxy.io) — the Rust JSON-RPC proxy that fronts Odoo.
+A collection of [Claude Code](https://claude.com/claude-code) **skills** for
+working with [ODXProxy](https://odxproxy.io), the Rust JSON-RPC proxy that fronts
+Odoo ERP.
 
-It teaches Claude to:
+## Skills in this repo
 
-1. **Understand a target Odoo instance's data model first** — discover fields
-   and relations via `fields_get` before writing a single struct/class/DTO.
-2. **Build the client** — either on an official ODXProxy SDK (Python, Java,
-   PHP, Kotlin, Swift, JavaScript/TS) or a hand-rolled client against the raw
-   JSON-RPC contract.
+| Skill | Folder | What it does |
+|-------|--------|--------------|
+| `odxproxy-clients` | [`odxproxy-clients/`](./odxproxy-clients) | Build apps against Odoo through ODXProxy — introspect the target Odoo's data model, then generate a client on an official SDK (Python, Java, PHP, Kotlin, Swift, JS/TS) or the raw JSON-RPC contract. |
 
-## What's in here
+More skills may be added as sibling folders over time — each is a self-contained
+directory with its own `SKILL.md`.
 
-| Path | Purpose |
-|------|---------|
-| `SKILL.md` | Skill entry point (name, description, mental model, workflow). Claude loads this first. |
-| `references/api-reference.md` | Full endpoint + JSON-RPC envelope contract (for custom clients). |
-| `references/actions.md` | Exact `params`/`keyword` shape for each of the 9 allowed actions. |
-| `references/errors.md` | Error-code catalog → handling strategy. |
-| `references/sdks.md` | Per-language SDK APIs, cross-SDK drift table, and remote git URLs to refresh from. |
-| `references/odoo-introspection.md` | Recipe for discovering a target Odoo's schema. |
-| `scripts/odx.py` | Zero-dependency CLI over `/api/odoo/execute` for live introspection/testing. |
-| `scripts/.env.example` | Config template for `odx.py` (the two distinct API keys). |
-| `CLAUDE.md` | Repo-level notes for anyone editing this skill. |
+## Install
 
-Claude reads `SKILL.md` up front; the `references/` files are pulled in **only
-when relevant** (progressive disclosure), so the skill stays cheap until needed.
+Claude Code discovers skills as direct subfolders of a `skills/` directory
+(`~/.claude/skills/<name>/SKILL.md` for personal, `<project>/.claude/skills/…`
+for a project). Because this repo bundles skills in subfolders, install links
+each skill into place with the included script.
 
-## Installing the skill
-
-Claude Code discovers skills in a `skills/` directory. Install this repo into one
-of these locations — keep `SKILL.md` at the installed folder's root.
-
-### Option A — Personal, from GitHub (available in every project)
+### Personal (all your projects)
 
 ```bash
-mkdir -p ~/.claude/skills
-git clone https://github.com/terrakernel/odxproxy-clients.git \
-          ~/.claude/skills/odxproxy-clients
+git clone https://github.com/terrakernel/odxproxy_claude_code_skills.git
+cd odxproxy_claude_code_skills
+./install.sh
 ```
 
-Update later with `git -C ~/.claude/skills/odxproxy-clients pull`.
+`install.sh` symlinks every skill folder into `~/.claude/skills/`, so a later
+`git pull` in this repo updates the installed skills automatically. Re-run it
+after pulling if new skills were added. Pass `--copy` to copy instead of symlink,
+or a target dir as the first argument (e.g. `./install.sh .claude/skills` inside
+a project to scope the skills to that repo).
 
-### Option B — Project-scoped (checked in with a specific repo)
+### Manual / project-scoped
 
-Add it to a project so your team gets it automatically. Either copy the files
-into `<project>/.claude/skills/odxproxy-clients/`, or add it as a submodule:
+Copy or symlink the individual skill folder yourself:
 
 ```bash
-git submodule add https://github.com/terrakernel/odxproxy-clients.git \
-    .claude/skills/odxproxy-clients
+ln -s "$(pwd)/odxproxy-clients" ~/.claude/skills/odxproxy-clients
+# or, project-scoped:
+cp -R odxproxy-clients /path/to/project/.claude/skills/odxproxy-clients
 ```
 
-> **Naming:** the skill's identity comes from the `name:` field in `SKILL.md`
-> (`odxproxy-clients`), not the folder name — but naming the installed folder
-> `odxproxy-clients` to match avoids confusion. After installing, start a new
-> Claude Code session (or reload) so the skill is picked up.
-
-You can verify it loaded by running `/help` / checking the available skills, or
-just by prompting something the description triggers on (see below).
-
-## Using the skill
-
-The skill **auto-triggers** — you don't have to invoke it manually. Its
-`description` fires when your prompt involves ODXProxy or building an Odoo client
-through it. Examples that activate it:
-
-- "Build a Python service that reads sales orders from Odoo through ODXProxy."
-- "Generate a typed TypeScript model for `res.partner` on my Odoo instance."
-- "Why am I getting error -32002 from odxproxy?"
-- "Introspect the `product.template` fields on my Odoo before we write the DAO."
-
-You can also point Claude at it explicitly: *"Use the odxproxy-clients skill to …"*.
-
-## Prerequisites for the introspection script
-
-`scripts/odx.py` needs only **Python 3** (standard library — no `pip install`).
-Configure the two API keys and target instance, then run:
-
-```bash
-cp scripts/.env.example scripts/.env      # then edit the values
-python3 scripts/odx.py --env-file scripts/.env fields_get res.partner
-python3 scripts/odx.py --env-file scripts/.env search_read res.partner --fields name,email --limit 5
-```
-
-The two keys are **different**: `ODX_PROXY_KEY` authenticates you to the proxy
-(`x-api-key` header); `ODX_ODOO_API_KEY` authenticates the proxy to Odoo. See
-`references/api-reference.md`. The script bakes in the "HTTP 200 can still carry
-an error" check, so a proxy or Odoo error exits non-zero.
-
-## Keeping SDK knowledge fresh
-
-The official SDKs evolve and have drifted from each other; `references/sdks.md`
-records each language's real API plus its **remote git URL**. To refresh after an
-SDK update, re-read the source from its repo (e.g.
-`git ls-remote https://github.com/terrakernel/odxproxy-client-js` for tags, then
-browse/clone) and update `sdks.md`. Treat the installed SDK's source as ground
-truth over any summary here.
+After installing, start a new Claude Code session so the skills are picked up.
+See each skill's own `README.md` for usage details.
 
 ## License
 
 MIT © Terrakernel Pte. Ltd. — see [`LICENSE`](./LICENSE).
-ODXProxy docs: https://odxproxy.io/docs .
