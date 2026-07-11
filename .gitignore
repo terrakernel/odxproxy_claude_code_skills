@@ -1,0 +1,15 @@
+# macOS
+.DS_Store
+
+# Claude Code local settings (machine-specific permissions)
+.claude/settings.local.json
+
+# Local secrets for the introspection script — never commit
+scripts/.env
+.env
+
+# Python
+__pycache__/
+*.py[cod]
+.venv/
+venv/
