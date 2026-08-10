@@ -40,9 +40,11 @@ per-language repo URLs, the verified public API of each, and the cross-SDK drift
 path.) Published SDKs: Python (`ODXProxyClient-Python`, import `odxproxy`),
 Java/Kotlin (`ODXProxyClient-Java`, pkg `io.odxproxy`), PHP (`ODXProxyClient-PHP`,
 `odxproxy/client`), Kotlin (`odxproxy-kotlin`, pkg `com.terrakernel`), Swift
-(`ODXProxyClient-Swift`), and JS/TS (`odxproxy-client-js`,
-`@terrakernel/odxproxy-client-js`). Dart and .NET clients exist but are **not
-published yet** — don't recommend them.
+(`ODXProxyClient-Swift`), JS/TS (`odxproxy-client-js`,
+`@terrakernel/odxproxy-client-js`), and .NET/C# (`ODXProxyClient-Net`, NuGet
+[`TerraKernel.OdxClient`](https://www.nuget.org/packages/TerraKernel.OdxClient)
+v1.0.0, .NET 10). A Dart client exists but is **not published yet** — don't
+recommend it.
 
 ## SDK client shape — shared intent, but NOT uniform
 
@@ -54,7 +56,10 @@ error types differ per language, and none match the shape shown on the website's
 SDK docs. Concrete examples: `unlink` is `remove` in JS/Java/Swift; `call_method`
 is `call` in PHP; the JVM has two separate clients (`io.odxproxy` high-level vs
 `com.terrakernel` low-level); JS is the only SDK whose error class names match
-the website. **Always read the specific SDK's source before writing against it.**
+the website. **.NET breaks the shape entirely**: a Rust C-ABI native core behind
+an AOT-friendly binding, with no per-action methods — one `ExecuteAsync` plus an
+`OdxAction` enum, `params`/`keyword` supplied as raw JSON bytes, async only.
+**Always read the specific SDK's source before writing against it.**
 Full per-language APIs, a drift table, and remote git URLs are in
 `references/sdks.md`. The raw HTTP/JSON-RPC contract (`references/api-reference.md`)
 is stable regardless of SDK drift — use it for custom clients.

@@ -36,7 +36,11 @@ Always log the response `id` / `request_id` — it ties client logs to proxy log
 
 ## How SDKs surface these
 
-Official SDKs map codes to typed exceptions (e.g. Python: `AuthError`,
-`OdooLogicError`, `OdooTimeoutError`, base `ODXProxyError`) while preserving the
-original `code`, `message`, `data`, `http_status`, and `request_id`. See
-`sdks.md`.
+Official SDKs map codes to typed exceptions while preserving the original
+`code`, `message`, `data`, `http_status`, and `request_id` — but the **class
+names differ per SDK**. JS/TS: `AuthError`, `OdooLogicError`,
+`OdooTimeoutError`, base `OdxError`. .NET: `OdxAuthException`,
+`OdxOdooException`, `OdxUpstreamTimeoutException`, base `OdxException` (with
+`Status`, `RpcCode`, `RpcData`). Swift: a single enum `OdxProxyError` with a
+case per code. Python/Java/PHP collapse everything into one exception type.
+See `sdks.md` before catching anything by name.

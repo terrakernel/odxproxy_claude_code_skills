@@ -4,7 +4,8 @@ Odoo models are heavily customized per deployment: custom fields, renamed
 selections, extra models, module-specific behavior. **Never assume field names.**
 Discover the real schema through the proxy before writing application code.
 
-Use any SDK's built-in `fields_get` method (every official SDK ships one) or
+Use the SDK's built-in `fields_get` (a method in most SDKs;
+`OdxAction.FieldsGet` in .NET) or
 `scripts/odx.py` (zero-dependency CLI) to run the calls below. **`fields_get`
 comes first, before you define any native-language struct/class/DTO** — the
 schema it returns is what you serialize into; don't hand-write the model shape

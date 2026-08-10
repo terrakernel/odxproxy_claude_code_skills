@@ -9,8 +9,16 @@ It teaches Claude to:
 1. **Understand a target Odoo instance's data model first** — discover fields
    and relations via `fields_get` before writing a single struct/class/DTO.
 2. **Build the client** — either on an official ODXProxy SDK (Python, Java,
-   PHP, Kotlin, Swift, JavaScript/TS) or a hand-rolled client against the raw
-   JSON-RPC contract.
+   PHP, Kotlin, Swift, JavaScript/TS, .NET/C#) or a hand-rolled client against
+   the raw JSON-RPC contract.
+
+Official SDK packages: [`odxproxy`](https://github.com/terrakernel/ODXProxyClient-Python) (PyPI) ·
+[`io.odxproxy:odxproxyclient-java`](https://github.com/terrakernel/ODXProxyClient-Java) ·
+[`odxproxy/client`](https://github.com/terrakernel/ODXProxyClient-PHP) (Composer) ·
+[`ODXProxyClient-Swift`](https://github.com/terrakernel/ODXProxyClient-Swift) (SwiftPM) ·
+[`@terrakernel/odxproxy-client-js`](https://github.com/terrakernel/odxproxy-client-js) (npm) ·
+[`TerraKernel.OdxClient`](https://www.nuget.org/packages/TerraKernel.OdxClient) (NuGet —
+[repo](https://github.com/terrakernel/ODXProxyClient-Net)).
 
 ## What's in here
 

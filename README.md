@@ -8,7 +8,7 @@ Odoo ERP.
 
 | Skill | Folder | What it does |
 |-------|--------|--------------|
-| `odxproxy-clients` | [`odxproxy-clients/`](./odxproxy-clients) | Build apps against Odoo through ODXProxy — introspect the target Odoo's data model, then generate a client on an official SDK (Python, Java, PHP, Kotlin, Swift, JS/TS) or the raw JSON-RPC contract. |
+| `odxproxy-clients` | [`odxproxy-clients/`](./odxproxy-clients) | Build apps against Odoo through ODXProxy — introspect the target Odoo's data model, then generate a client on an official SDK (Python, Java, PHP, Kotlin, Swift, JS/TS, .NET/C#) or the raw JSON-RPC contract. |
 
 More skills may be added as sibling folders over time — each is a self-contained
 directory with its own `SKILL.md`.

@@ -5,10 +5,11 @@ description: >-
   ERP through ODXProxy — the Rust JSON-RPC proxy at odxproxy.io. Covers the
   9 allowed actions (search_read, search, read, fields_get, create, write,
   unlink, search_count, call_method), the request/response envelope, error
-  handling, the official SDKs (Python, Java, PHP, Kotlin, Swift, Dart, .NET,
-  JavaScript), and how to introspect a target Odoo instance's data model
-  (fields_get / relations) before writing code. Trigger on: ODXProxy, odxproxy,
-  Odoo via proxy, execute_kw over JSON-RPC, "for_instance", x-api-key + Odoo
+  handling, the official SDKs (Python, Java, PHP, Kotlin, Swift, JavaScript,
+  .NET/C# via NuGet TerraKernel.OdxClient, Dart), and how to introspect a target
+  Odoo instance's data model (fields_get / relations) before writing code.
+  Trigger on: ODXProxy, odxproxy, Odoo via proxy, execute_kw over JSON-RPC,
+  "for_instance", OdxClient/OdxAction/TerraKernel.OdxClient, x-api-key + Odoo
   api_key, building an Odoo client/app.
 ---
 
@@ -63,9 +64,10 @@ its real schema (field names, `type`, `required`, `relation`, `selection`),
 (structs/classes/DTOs/models). Writing the native data model before introspecting
 is the most common source of bugs.
 
-- Every official SDK exposes a `fields_get` method by default — use the SDK's
-  own `fields_get` when working inside a chosen SDK. `call_method` is **not**
-  needed for this; `fields_get` is one of the 9 first-class actions.
+- Every official SDK exposes `fields_get` first-class — as a method in most, as
+  `OdxAction.FieldsGet` in .NET. Use it when working inside a chosen SDK;
+  `call_method` is **not** needed for this, `fields_get` is one of the 9
+  actions.
 - No SDK yet (or just exploring)? `scripts/odx.py` is a zero-dependency CLI over
   `/api/odoo/execute` for running `fields_get` and `search_read` against the
   live instance.
@@ -79,9 +81,13 @@ models, flagging every field the user must confirm.
 
 **2. Pick the client path.** Either an official SDK or a hand-rolled client:
 
-- Official SDKs all share one shape: hold proxy URL + `x-api-key` once, bind an
-  Odoo instance with `for_instance(...)`, call one method per action, catch
-  typed exceptions. Language specifics + local source paths:
+- Official SDKs share one *intent*: hold proxy URL + `x-api-key` once, bind an
+  Odoo instance, call one method per action, catch typed exceptions — but the
+  actual APIs have **drifted** per language, so read the real source before
+  writing code. Notable exceptions: the `com.terrakernel` Kotlin client is
+  low-level (build the request yourself), and the .NET client has **no
+  per-action methods at all** — one `ExecuteAsync` plus an `OdxAction` enum,
+  with `params`/`keyword` passed as raw JSON bytes. Language specifics:
   `references/sdks.md`.
 - Custom client: implement the envelope and the 200-with-error check yourself.
   Contract is in `references/api-reference.md`.
@@ -110,8 +116,9 @@ messages, fail fast on auth/license). Catalog: `references/errors.md`.
 
 The official SDK sources live on GitHub under **https://github.com/terrakernel**
 (per-language repo URLs are in `references/sdks.md`). Published SDKs: Python,
-Java (Kotlin), PHP, Kotlin, Swift, and JavaScript/TS. Dart and .NET exist but are
-**not published yet** — don't recommend them. Before relying on exact symbol
+Java (Kotlin), PHP, Kotlin, Swift, JavaScript/TS, and .NET/C# (NuGet
+`TerraKernel.OdxClient`). Dart exists but is **not published yet** — don't
+recommend it. Before relying on exact symbol
 names, read the real source of the SDK the user is on — browse/clone its repo, or
 read a local checkout if you have one — because this skill's summaries can drift
 from the code.

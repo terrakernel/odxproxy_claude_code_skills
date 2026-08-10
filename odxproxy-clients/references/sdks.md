@@ -22,10 +22,10 @@ naming convention and should be verified before relying on them.
 | Kotlin | `odxproxy-kotlin` | group `com.terrakernel` | *(no public repo found under `ODXProxyClient-Kotlin`; local has no remote — ask the user for the URL)* |
 | Swift | `ODXProxyClient-Swift` | SwiftPM, module `ODXProxyClientSwift` | `https://github.com/terrakernel/ODXProxyClient-Swift` *(confirmed)* |
 | JavaScript / TS | *(not local — clone remote)* | npm `@terrakernel/odxproxy-client-js` (v0.1.7), fetch-based, bundled TS types | `https://github.com/terrakernel/odxproxy-client-js` *(confirmed)* |
+| .NET / C# | `ODXProxyClient-Net` | NuGet `TerraKernel.OdxClient` (v1.0.0, .NET 10), Rust C-ABI native core + AOT-friendly binding | `https://github.com/terrakernel/ODXProxyClient-Net` *(published 2026-08-08)* |
 
-Dart and .NET clients exist locally (`ODXProxyClient-Dart`, `ODXProxyClient-Net`)
-but are **not published yet** — treat them as WIP, not shippable SDKs, and don't
-recommend them until released.
+A Dart client exists locally (`ODXProxyClient-Dart`) but is **not published yet**
+— treat it as WIP, not a shippable SDK, and don't recommend it until released.
 
 > **Two distinct JVM clients exist** — don't conflate them: `odxproxyclient-java`
 > (package `io.odxproxy`) is a **high-level** client with named action methods,
@@ -43,19 +43,20 @@ The 200-with-error check (see `api-reference.md`) is done inside the SDK.
 
 Method/shape naming is **not** uniform — always check the specific SDK:
 
-| Concept | Python | Java (`io.odxproxy`) | PHP | Swift | Kotlin (`com.terrakernel`) | JS/TS |
-|---------|--------|----------------------|-----|-------|-----------------------------|-------|
-| Init | `OdxClient(config, context)` per-instance | singleton `OdxProxyClient.init()` / facade `OdxProxy` | `new OdxProxyClient(config)` or static `Odx::init/with` | singleton `OdxProxyClient.configure(with:)`, `OdxApi` statics | `OdxProxyClient.getInstance(info)` | singleton `init(options)` + module funcs |
-| `unlink` action | `unlink` | **`remove`** | `unlink` | **`remove`** | *(none — build request)* | **`remove`** |
-| `call_method` | `call_method` | `callMethod(fn_name)` | **`call(model, method, args)`** | `callMethod(functionName:)` | *(none)* | `call_method(model, params, keyword, function_name)` |
-| Async | async (httpx) | callback/sync (OkHttp) | sync (cURL) | `async throws` | `suspend` (coroutines) | `Promise` (fetch) |
-| Errors | `OdxServerErrorException` (base `OdxError`) | `OdxServerErrorException` (RuntimeException) | `OdxException` (RuntimeException) | **rich enum `OdxProxyError`** (per-code cases) | via `OdxServerResponse.error` | **typed subclasses of `OdxError`** (per-code) |
-| Named actions? | yes | yes | yes | yes | **no (low-level)** | yes (functional) |
+| Concept | Python | Java (`io.odxproxy`) | PHP | Swift | Kotlin (`com.terrakernel`) | JS/TS | .NET |
+|---------|--------|----------------------|-----|-------|-----------------------------|-------|------|
+| Init | `OdxClient(config, context)` per-instance | singleton `OdxProxyClient.init()` / facade `OdxProxy` | `new OdxProxyClient(config)` or static `Odx::init/with` | singleton `OdxProxyClient.configure(with:)`, `OdxApi` statics | `OdxProxyClient.getInstance(info)` | singleton `init(options)` + module funcs | `OdxClient.Create(baseUrl, apiKey)` (IDisposable) + per-call `OdooInstance` |
+| `unlink` action | `unlink` | **`remove`** | `unlink` | **`remove`** | *(none — build request)* | **`remove`** | `OdxAction.Unlink` (enum, not a method) |
+| `call_method` | `call_method` | `callMethod(fn_name)` | **`call(model, method, args)`** | `callMethod(functionName:)` | *(none)* | `call_method(model, params, keyword, function_name)` | `OdxAction.CallMethod` + `fnName:` arg |
+| Async | async (httpx) | callback/sync (OkHttp) | sync (cURL) | `async throws` | `suspend` (coroutines) | `Promise` (fetch) | `Task` — **async only, no sync API** |
+| Errors | `OdxServerErrorException` (base `OdxError`) | `OdxServerErrorException` (RuntimeException) | `OdxException` (RuntimeException) | **rich enum `OdxProxyError`** (per-code cases) | via `OdxServerResponse.error` | **typed subclasses of `OdxError`** (per-code) | **typed subclasses of `OdxException`** (per-code) |
+| Named actions? | yes | yes | yes | yes | **no (low-level)** | yes (functional) | **no — one `ExecuteAsync` + `OdxAction` enum** |
 
 The **JS SDK is the only one whose error class names match the website docs**
 (`AuthError`, `OdooLogicError`, `OdooTimeoutError`, …) — the website's SDK docs
 appear modeled on it. None of the JVM/Python/PHP SDKs use that naming; Swift's
-enum is closest in spirit but with different case names. Method naming also
+enum and .NET's `OdxException` subclasses are closest in spirit but use
+different case/class names. Method naming also
 varies: JS uses **snake_case** (`search_read`, `fields_get`, `call_method`),
 Java/Swift use **camelCase**, and `unlink` is exposed as `remove` in JS, Java,
 and Swift.
@@ -188,6 +189,80 @@ two-step check): `AuthError` (-32000), `InvalidActionError` (-32001),
 `MissingFnNameError` (-32002), `OdooTimeoutError` (-32003), `OdooConnectError`
 (-32004), `InternalProxyError` (-32005), `LicenseError` (0/403),
 `OdooLogicError` (200 + error). Branch with `instanceof`.
+
+## .NET / C# — actual API (`TerraKernel.OdxClient` v1.0.0)
+
+`dotnet add package TerraKernel.OdxClient`. Namespace `TerraKernel.OdxClient`.
+**Architecturally different from every other SDK**: the network core (connection
+pool, round-trip, retries, cancellation) is **Rust compiled to a C-ABI cdylib**
+(`odxclient.dll`) and the .NET layer is a thin, Native-AOT-friendly P/Invoke
+binding. Requires **.NET 10**, and the README states **Windows 11 x64 only**
+(`x86_64-pc-windows-msvc`); the native DLL must sit next to the app (or ship
+under `runtimes/win-x64/native/`). No NuGet dependencies.
+
+It is a **raw passthrough** — no domain models, and **no per-action methods**.
+There is one `ExecuteAsync` plus an `OdxAction` enum:
+
+```csharp
+using System.Text.Json.Serialization;
+using TerraKernel.OdxClient;
+
+// Source-generated JSON context — required by the typed overloads (reflection-free, AOT-safe).
+[JsonSourceGenerationOptions(PropertyNameCaseInsensitive = true)]
+[JsonSerializable(typeof(Partner[]))]
+internal partial class AppJson : JsonSerializerContext;
+
+public sealed record Partner(long Id, string Name);
+
+using var client = OdxClient.Create(baseUrl: "https://proxy.example:3000",
+                                    apiKey:  "<proxy x-api-key>");   // reuse; owns the pool
+
+var odoo = new OdooInstance { Url = "https://odoo.example", UserId = 2,
+                              Db = "mydb", ApiKey = "<odoo user key>" };
+
+Partner[]? partners = await client.ExecuteAsync(
+    action:      OdxAction.SearchRead,
+    modelId:     "res.partner",
+    instance:    odoo,
+    resultType:  AppJson.Default.PartnerArray,
+    paramsJson:  """[[["is_company","=",true]]]"""u8.ToArray(),
+    keywordJson: """{"fields":["id","name"],"limit":80}"""u8.ToArray());
+```
+
+- **Actions:** `OdxAction.{SearchCount, Search, Read, FieldsGet, SearchRead,
+  Create, Write, Unlink, CallMethod}` → the exact wire strings. A raw `string`
+  action overload exists as an escape hatch. `CallMethod` requires `fnName:` —
+  the client throws `ArgumentException` up front rather than round-tripping a
+  `-32002`.
+- **Endpoints:** `ExecuteAsync` (`/api/odoo/execute`), `GetVersionAsync`,
+  `GetLicenseAsync`, `GetAboutAsync`, `GetMetricsAsync`. All async, all take an
+  optional `CancellationToken`.
+- **Three call styles:** (a) structured + typed (recommended);
+  (b) raw body via `OdxRequestBuilder.BuildExecute/BuildVersion` + typed result;
+  (c) raw body + raw `OdxResponse` (`.Status`, `.HttpStatus`, `.Body`).
+- **`params`/`keyword` are raw Odoo JSON** passed as `ReadOnlyMemory<byte>` (a
+  JSON array and a JSON object) and spliced in verbatim — build them yourself,
+  e.g. with UTF-8 literals (`"""…"""u8.ToArray()`). Typed overloads need a
+  source-generated `JsonTypeInfo<T>` from your `JsonSerializerContext`.
+- **Threading:** network + JSON always run off the caller's thread; there is
+  **deliberately no synchronous API**. Never `Task.Run`, `.Result`, `.Wait()`,
+  or `.GetAwaiter().GetResult()` — just `await`.
+- **Errors:** typed subclasses of `OdxException` (carrying `Status`, `RpcCode`,
+  `RpcData`): `OdxAuthException` (-32000), `OdxBadRequestException`
+  (-32001/-32002), `OdxLicenseException` (0/403), `OdxUpstreamTimeoutException`
+  (-32003), `OdxUpstreamConnectException` (-32004), `OdxProxyInternalException`
+  (-32005), `OdxOdooException` (**200-with-error**, with `OdooCode` + `RpcData`),
+  `OdxServerException` (other non-2xx), `OdxTransportException` (DNS/TCP/TLS).
+  Cancellation surfaces `OperationCanceledException`.
+- **Odoo wire helpers (opt-in):** namespace `TerraKernel.OdxClient.Json` ships
+  `Many2One` + `Many2OneConverter` (reads `[id, name]` or `false`, writes the
+  bare id) and `OdooFalseAsNullStringConverter`. Add them to your own
+  `JsonSerializerOptions` — never applied implicitly.
+
+> The repo README's "Status" section still lists NuGet packaging as roadmap even
+> though v1.0.0 is published — treat that section as stale, and confirm the
+> platform/target-framework support against the NuGet listing for the version
+> the user actually installed.
 
 ## When advising on a language
 
