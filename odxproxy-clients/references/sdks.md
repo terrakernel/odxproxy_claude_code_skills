@@ -196,9 +196,17 @@ two-step check): `AuthError` (-32000), `InvalidActionError` (-32001),
 **Architecturally different from every other SDK**: the network core (connection
 pool, round-trip, retries, cancellation) is **Rust compiled to a C-ABI cdylib**
 (`odxclient.dll`) and the .NET layer is a thin, Native-AOT-friendly P/Invoke
-binding. Requires **.NET 10**, and the README states **Windows 11 x64 only**
-(`x86_64-pc-windows-msvc`); the native DLL must sit next to the app (or ship
+binding. Requires **.NET 10** (the current LTS) and runs on **Windows 11 x64
+only** (`x86_64-pc-windows-msvc`) — this is confirmed, not a doc bug: the native
+core ships as a win-x64 `odxclient.dll`, which must sit next to the app (or
 under `runtimes/win-x64/native/`). No NuGet dependencies.
+
+> **Don't be misled by the NuGet listing.** It shows computed targets like
+> `net10.0-android`, `net10.0-ios`, `net10.0-browser`, `net10.0-macos` — those
+> are auto-derived by NuGet from the `net10.0` TFM and do **not** mean the
+> package works there. There is no native core for those platforms. If a user
+> asks for macOS/Linux/mobile, tell them to use a different SDK (or the raw
+> JSON-RPC contract in `api-reference.md`), not this one.
 
 It is a **raw passthrough** — no domain models, and **no per-action methods**.
 There is one `ExecuteAsync` plus an `OdxAction` enum:
@@ -260,9 +268,8 @@ Partner[]? partners = await client.ExecuteAsync(
   `JsonSerializerOptions` — never applied implicitly.
 
 > The repo README's "Status" section still lists NuGet packaging as roadmap even
-> though v1.0.0 is published — treat that section as stale, and confirm the
-> platform/target-framework support against the NuGet listing for the version
-> the user actually installed.
+> though v1.0.0 is published — treat that one section as stale. The rest of that
+> README (including the Windows-11-x64 requirement) is accurate.
 
 ## When advising on a language
 
