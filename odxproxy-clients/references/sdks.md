@@ -31,8 +31,8 @@ Notes:
 - **Versioning:** Python, JS, Java and PHP track the proxy version (0.9.x);
   Swift and .NET have their own semver. v2 needs **ODXProxy 0.9.0+** on the
   server regardless of SDK version.
-- **Swift install URL:** use the repo URL above. (Some Swift README revisions
-  show `terrakernel/odxproxyswift.git`, which does not resolve.)
+- **Swift dependency:** `.package(url: "https://github.com/terrakernel/ODXProxyClient-Swift.git", from: "1.1.0")`
+  and `.product(name: "ODXProxyClientSwift", package: "ODXProxyClient-Swift")`.
 
 ## Shape of each SDK
 
