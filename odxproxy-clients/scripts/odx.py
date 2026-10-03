@@ -10,11 +10,17 @@ Configuration comes from environment variables (or a --env-file / .env):
   ODX_PROXY_KEY     the PROXY api key (sent as the x-api-key header)
   ODX_ODOO_URL      target Odoo base URL
   ODX_ODOO_DB       Odoo database name
-  ODX_ODOO_USER_ID  Odoo user id (integer)
+  ODX_ODOO_USER_ID  Odoo user id (integer; v1 only, not needed with --v2)
   ODX_ODOO_API_KEY  the ODOO USER api key
 
 The two keys are different: ODX_PROXY_KEY authenticates you to the proxy;
 ODX_ODOO_API_KEY authenticates the proxy to Odoo. See references/api-reference.md.
+
+API version: the default is v1 (/api/odoo/*, execute_kw over /jsonrpc, any Odoo
+up to 21). Pass --v2 for /v2/odoo/* (Odoo JSON-2, Odoo 19+, the only option on
+22+). The same commands work on both; with --v2 the arguments are sent as named
+kwargs under Odoo's Python parameter names, and call_method takes --ids/--kwargs
+instead of --params. Run `odx.py --v2 version` to check whether v2 is available.
 
 Examples:
   python odx.py version
@@ -27,6 +33,14 @@ Examples:
   python odx.py unlink res.partner --ids 42
   python odx.py call_method sale.order action_confirm --params '[[42]]'
   python odx.py execute --action search --model res.partner --params '[[["id",">",0]]]'
+
+  python odx.py --v2 version
+  python odx.py --v2 search_read res.partner --fields name,email --limit 5 \\
+      --context '{"lang":"en_US","allowed_company_ids":[1]}'
+  python odx.py --v2 create res.partner --values '[{"name":"Acme"},{"name":"Globex"}]'
+  python odx.py --v2 call_method sale.order action_confirm --ids 42
+  python odx.py --v2 call_method res.partner name_search --kwargs '{"name":"Acm","limit":5}'
+  python odx.py --v2 execute --model res.partner --method search --kwargs '{"domain":[]}'
 
 Every response is checked for the 200-with-error case; a proxy or Odoo error
 exits non-zero with the JSON-RPC error printed to stderr.
@@ -80,6 +94,12 @@ def odoo_instance():
     return {"url": url, "db": db, "user_id": uid, "api_key": key}
 
 
+def odoo_instance_v2():
+    # JSON-2 derives the user from the key, so there is no user_id.
+    url, db, key = require_env("ODX_ODOO_URL", "ODX_ODOO_DB", "ODX_ODOO_API_KEY")
+    return {"url": url, "db": db, "api_key": key}
+
+
 def post(path, body, timeout_secs=None):
     proxy_url, proxy_key = require_env("ODX_PROXY_URL", "ODX_PROXY_KEY")
     data = json.dumps(body).encode("utf-8")
@@ -130,6 +150,21 @@ def execute(action, model, params=None, keyword=None, fn_name=None, timeout=None
     return post("/api/odoo/execute", body, timeout_secs=timeout)
 
 
+def execute_v2(model, method, kwargs=None, context=None, timeout=None):
+    kwargs = dict(kwargs or {})
+    if context:
+        # The call's own context keys win over --context.
+        kwargs["context"] = {**context, **kwargs.get("context", {})}
+    body = {
+        "id": str(uuid.uuid4()),
+        "model_id": model,
+        "method": method,
+        "kwargs": kwargs,
+        "odoo_instance": odoo_instance_v2(),
+    }
+    return post("/v2/odoo/execute", body, timeout_secs=timeout)
+
+
 def _json(arg, default):
     if arg is None:
         return default
@@ -144,57 +179,90 @@ def _ids(arg):
     return [int(x) for x in _csv(arg)] if arg else []
 
 
+def _set(d, key, value):
+    """Add key only when the caller set it: v2 must omit unset args, not send null."""
+    if value is not None:
+        d[key] = value
+    return d
+
+
+def _add_common(parser):
+    parser.add_argument("--env-file", help="path to a .env file to load")
+    parser.add_argument("--timeout", type=int, help="x-request-timeout seconds")
+    parser.add_argument("--v2", action="store_true",
+                        help="use /v2/odoo/* (Odoo JSON-2, Odoo 19+) instead of v1")
+    parser.add_argument("--context", help="v2 only: JSON context merged into kwargs.context")
+
+
 def build_parser():
     p = argparse.ArgumentParser(description="Zero-dependency ODXProxy CLI.")
-    p.add_argument("--env-file", help="path to a .env file to load")
-    p.add_argument("--timeout", type=int, help="x-request-timeout seconds")
+    _add_common(p)
+    # Shared options are accepted before or after the subcommand. The subcommand
+    # copies use SUPPRESS so an option given before it isn't reset to the default.
+    common = argparse.ArgumentParser(add_help=False, argument_default=argparse.SUPPRESS)
+    _add_common(common)
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    sub.add_parser("version", help="GET Odoo version via /api/odoo/version")
+    def cmd(name, **kw):
+        return sub.add_parser(name, parents=[common], **kw)
+
+    cmd("version", help="Odoo version via /api/odoo/version (or /v2/odoo/version)")
 
     def add_model(sp):
         sp.add_argument("model", help="Odoo model, e.g. res.partner")
 
-    sc = sub.add_parser("search_count"); add_model(sc)
+    sc = cmd("search_count"); add_model(sc)
     sc.add_argument("--domain", help='JSON domain, e.g. [["is_company","=",true]]')
 
-    s = sub.add_parser("search"); add_model(s)
+    s = cmd("search"); add_model(s)
     s.add_argument("--domain"); s.add_argument("--limit", type=int)
     s.add_argument("--offset", type=int); s.add_argument("--order")
 
-    sr = sub.add_parser("search_read"); add_model(sr)
+    sr = cmd("search_read"); add_model(sr)
     sr.add_argument("--domain"); sr.add_argument("--fields")
     sr.add_argument("--limit", type=int); sr.add_argument("--offset", type=int)
     sr.add_argument("--order")
 
-    rd = sub.add_parser("read"); add_model(rd)
+    rd = cmd("read"); add_model(rd)
     rd.add_argument("--ids", required=True); rd.add_argument("--fields")
 
-    fg = sub.add_parser("fields_get"); add_model(fg)
+    fg = cmd("fields_get"); add_model(fg)
     fg.add_argument("--attrs", help="comma list, e.g. string,type,required,relation")
 
-    cr = sub.add_parser("create"); add_model(cr)
-    cr.add_argument("--values", required=True, help="JSON values dict")
+    cr = cmd("create"); add_model(cr)
+    cr.add_argument("--values", required=True,
+                    help="JSON values dict (with --v2, a dict or a list of dicts)")
 
-    wr = sub.add_parser("write"); add_model(wr)
+    wr = cmd("write"); add_model(wr)
     wr.add_argument("--ids", required=True); wr.add_argument("--values", required=True)
 
-    ul = sub.add_parser("unlink"); add_model(ul)
+    ul = cmd("unlink"); add_model(ul)
     ul.add_argument("--ids", required=True)
 
-    cm = sub.add_parser("call_method"); add_model(cm)
-    cm.add_argument("fn_name"); cm.add_argument("--params")
+    cm = cmd("call_method"); add_model(cm)
+    cm.add_argument("fn_name")
+    cm.add_argument("--params", help="v1: JSON positional args")
+    cm.add_argument("--ids", help="v2: record ids (record methods only)")
+    cm.add_argument("--kwargs", help="v2: JSON object of named args")
 
-    ex = sub.add_parser("execute", help="raw execute with explicit action")
-    ex.add_argument("--action", required=True); ex.add_argument("--model", required=True)
-    ex.add_argument("--params"); ex.add_argument("--keyword"); ex.add_argument("--fn-name")
+    ex = cmd("execute", help="raw execute (v1: --action; v2: --method)")
+    ex.add_argument("--model", required=True)
+    ex.add_argument("--action", help="v1 action"); ex.add_argument("--params")
+    ex.add_argument("--keyword"); ex.add_argument("--fn-name")
+    ex.add_argument("--method", help="v2 method"); ex.add_argument("--kwargs")
     return p
 
 
 def run(args):
     if args.cmd == "version":
         url, = require_env("ODX_ODOO_URL")
-        return post("/api/odoo/version", {"id": str(uuid.uuid4()), "url": url})
+        path = "/v2/odoo/version" if args.v2 else "/api/odoo/version"
+        return post(path, {"id": str(uuid.uuid4()), "url": url})
+
+    if args.v2:
+        return run_v2(args)
+    if args.context:
+        sys.exit("error: --context is v2 only; on v1 put it in `execute --keyword`")
 
     if args.cmd == "search_count":
         return execute("search_count", args.model,
@@ -238,13 +306,78 @@ def run(args):
         return execute("unlink", args.model, params=[_ids(args.ids)], timeout=args.timeout)
 
     if args.cmd == "call_method":
+        if args.ids or args.kwargs:
+            sys.exit("error: --ids/--kwargs are v2 only; on v1 use --params")
         return execute("call_method", args.model, params=_json(args.params, []),
                        fn_name=args.fn_name, timeout=args.timeout)
 
     if args.cmd == "execute":
+        if not args.action:
+            sys.exit("error: v1 execute needs --action (or pass --v2 with --method)")
         return execute(args.action, args.model, params=_json(args.params, []),
                        keyword=_json(args.keyword, {}), fn_name=args.fn_name,
                        timeout=args.timeout)
+
+    raise SystemExit(f"unknown command: {args.cmd}")
+
+
+def run_v2(args):
+    """v2: named kwargs under Odoo's Python parameter names, sent verbatim."""
+    ctx = _json(args.context, None)
+
+    def call(method, kwargs):
+        return execute_v2(args.model, method, kwargs, context=ctx, timeout=args.timeout)
+
+    if args.cmd == "search_count":
+        return call("search_count", {"domain": _json(args.domain, [])})
+
+    if args.cmd == "search":
+        kw = {"domain": _json(args.domain, [])}
+        _set(kw, "offset", args.offset); _set(kw, "limit", args.limit)
+        _set(kw, "order", args.order)
+        return call("search", kw)
+
+    if args.cmd == "search_read":
+        kw = {}
+        _set(kw, "domain", _json(args.domain, None)); _set(kw, "fields", _csv(args.fields))
+        _set(kw, "offset", args.offset); _set(kw, "limit", args.limit)
+        _set(kw, "order", args.order)
+        return call("search_read", kw)
+
+    if args.cmd == "read":
+        return call("read", _set({"ids": _ids(args.ids)}, "fields", _csv(args.fields)))
+
+    if args.cmd == "fields_get":
+        return call("fields_get", _set({}, "attributes", _csv(args.attrs)))
+
+    if args.cmd == "create":
+        vals = _json(args.values, {})
+        # vals_list is always an array; the result is always a list of ids.
+        return call("create", {"vals_list": vals if isinstance(vals, list) else [vals]})
+
+    if args.cmd == "write":
+        return call("write", {"ids": _ids(args.ids), "vals": _json(args.values, {})})
+
+    if args.cmd == "unlink":
+        return call("unlink", {"ids": _ids(args.ids)})
+
+    if args.cmd == "call_method":
+        if args.params:
+            sys.exit("error: v2 has no positional args; use --ids and/or --kwargs")
+        kw = _json(args.kwargs, {})
+        if not isinstance(kw, dict):
+            sys.exit("error: --kwargs must be a JSON object")
+        if args.ids:
+            kw["ids"] = _ids(args.ids)
+        return execute_v2(args.model, args.fn_name, kw, context=ctx, timeout=args.timeout)
+
+    if args.cmd == "execute":
+        if not args.method:
+            sys.exit("error: v2 execute needs --method (--action/--params are v1)")
+        kw = _json(args.kwargs, {})
+        if not isinstance(kw, dict):
+            sys.exit("error: --kwargs must be a JSON object")
+        return execute_v2(args.model, args.method, kw, context=ctx, timeout=args.timeout)
 
     raise SystemExit(f"unknown command: {args.cmd}")
 

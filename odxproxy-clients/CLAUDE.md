@@ -9,57 +9,31 @@ This is a **Claude Skills project**, not an application. Its purpose is to make 
 1. **Understanding a target Odoo instance's data structure** by introspecting it through ODXProxy (`fields_get`, `search_read`, etc.).
 2. **Helping the user build their application/system** against that Odoo instance — either on top of ODXProxy's official client SDKs or a custom client.
 
-The directory is currently a clean slate: there is no build system, no test suite, and no source code yet. Do not invent build/lint/test commands — none exist until the skill's own tooling is created. When scaffolding is added, document the real commands here.
+Layout: `SKILL.md` (entry point, loaded first — keep it short; the description must stay ≤1024 characters), `references/*.md` (loaded on demand), `scripts/odx.py` (zero-dependency Python CLI). There is no build system, lint or test suite. Verify `odx.py` changes by running it against a real ODXProxy (≥0.9.0 for `--v2`) in front of an Odoo 19+ instance, for both v1 and `--v2`, including the error paths.
 
 ## ODXProxy: the domain this skill operates on
 
-ODXProxy (https://odxproxy.io, docs at `/docs`) is a Rust reverse proxy exposing **one unified JSON-RPC 2.0 API in front of any number of Odoo instances**. It wraps Odoo's `execute_kw`, enforces a fixed method allowlist, and routes each request to a per-request-specified Odoo backend. Apps talk to the proxy, never to Odoo directly.
+ODXProxy (https://odxproxy.io, docs at `/docs`; wire spec in the proxy repo's `SYSTEM_ARCHITECTURE.md`) is a Rust reverse proxy exposing **one unified JSON-RPC 2.0 API in front of any number of Odoo instances**. Apps talk to the proxy, never to Odoo directly. It has **two API versions**:
+
+- **v1** — `POST /api/odoo/execute` (alias `/v1/odoo/execute`): wraps Odoo's `execute_kw` over `/jsonrpc`, works on any Odoo up to 21. Body: `id`, `action` (one of 9: `search_count`, `search`, `read`, `fields_get`, `search_read`, `create`, `write`, `unlink`, `call_method` + `fn_name`), `model_id`, `params` (positional args), `keyword` (kwargs), `odoo_instance {url, db, user_id, api_key}`.
+- **v2** — `POST /v2/odoo/execute` (ODXProxy 0.9.0+): Odoo's JSON-2 API, Odoo 19+, the only option on 22+ (Odoo removes `/jsonrpc`). Body: `id`, `model_id`, `method` (any public method, no allowlist), `kwargs` (one object of named args under Odoo's Python parameter names), `odoo_instance {url, db, api_key}` (no `user_id`). `create` always takes/returns a list. Database selection follows the server's `dbfilter`.
+
+v1 is not deprecated (it's the only path to Odoo ≤18). Version endpoints: `POST /api/odoo/version`, `POST /v2/odoo/version` (`{version_info, version}`). Ops: `GET /_/license`, `GET /_/about`, `GET /_/metrics`. Optional header `x-request-timeout` (seconds; default 15).
 
 **Two distinct API keys — never conflate them:**
 - **Proxy key** → `x-api-key` HTTP header (authenticates client → proxy).
-- **Odoo user key** → `odoo_instance.api_key` in the request body (authenticates proxy → Odoo).
-
-**Primary endpoint:** `POST /api/odoo/execute`. Request body fields:
-`id`, `action`, `model_id`, `fn_name` (only for `call_method`), `params` (positional args to execute_kw), `keyword` (kwargs: `fields`, `limit`, `offset`, `order`, `context`), and `odoo_instance` `{url, db, user_id, api_key}`. Optional header `x-request-timeout` (seconds; default 15). Other endpoints: `POST /api/odoo/version`, `GET /_/license`, `GET /_/about`, `GET /_/metrics` (Prometheus).
-
-**The 9 allowed actions** (the `action` value must match exactly):
-`search_count`, `search`, `read`, `fields_get`, `search_read`, `create`, `write`, `unlink`, `call_method` (arbitrary model method — requires a non-empty `fn_name`).
+- **Odoo user key** → `odoo_instance.api_key` in the request body (authenticates proxy → Odoo). On v2 it must be an API key (not a password), and non-admin keys expire.
 
 **Response envelope on every status code:** `{ "jsonrpc": "2.0", "id", "result", "error": { "code", "message", "data" } }`.
 
 > **Critical gotcha:** an HTTP `200` can still carry a populated `error` (Odoo logic/permission failures pass through). Always check `error` before reading `result`; never trust HTTP status alone.
 
-**Error codes:** `-32001` (400, action not allowlisted) · `-32002` (400, missing `fn_name`) · `-32000` (401, bad/missing api key) · `0` (403, expired/invalid license) · `-32004` (502, Odoo unreachable) · `-32003` (504, Odoo timeout) · `-32005` (500, decode failure) · Odoo's own errors pass through on 200.
+**Error codes:** proxy codes are `0` and negatives — `-32000` (401, bad api key), `0` (403 only: license), `-32001`/`-32002` (400, v1 action/fn_name), `-32007` (400, v2 invalid identifier), `-32006` (200, v2: no JSON-2 or `dbfilter`), `-32004` (502), `-32003` (504), `-32005` (500). Codes `100`–`599` on HTTP 200 are Odoo's HTTP status on v2 (`401`, `403`, `404`, `409`, `422`, `5xx`). v1 Odoo errors are code `0` on Odoo 19+ (`200` on older), on HTTP 200.
 
 ## Reference material (SDK sources)
 
-The real SDK sources live on GitHub under **https://github.com/terrakernel** —
-read the actual source rather than guessing. `references/sdks.md` lists the
-per-language repo URLs, the verified public API of each, and the cross-SDK drift.
-(If you happen to have local clones, read those; don't assume any fixed local
-path.) Published SDKs: Python (`ODXProxyClient-Python`, import `odxproxy`),
-Java/Kotlin (`ODXProxyClient-Java`, pkg `io.odxproxy`), PHP (`ODXProxyClient-PHP`,
-`odxproxy/client`), Kotlin (`odxproxy-kotlin`, pkg `com.terrakernel`), Swift
-(`ODXProxyClient-Swift`), JS/TS (`odxproxy-client-js`,
-`@terrakernel/odxproxy-client-js`), and .NET/C# (`ODXProxyClient-Net`, NuGet
-[`TerraKernel.OdxClient`](https://www.nuget.org/packages/TerraKernel.OdxClient)
-v1.0.0, .NET 10). A Dart client exists but is **not published yet** — don't
-recommend it.
+The real SDK sources live on GitHub under **https://github.com/terrakernel** — read the actual source rather than guessing. `references/sdks.md` lists packages, repo URLs, and each SDK's v1/v2 entry points and error types. Published SDKs (all with v1 + v2): Python `terrakernel-odxproxyclient` 0.9.0+, JS/TS `@terrakernel/odxproxy-client-js` 0.9.0+, Java/Kotlin `io.odxproxy:odxproxyclient-java` 0.9.0+, PHP `odxproxy/client` 0.9.0+, Swift `ODXProxyClient-Swift` 1.1.0+, .NET `TerraKernel.OdxClient` 1.1.0+ (Windows 11 x64 only). There is no separate Kotlin SDK (use the Java one, which is written in Kotlin) and no published Dart SDK — don't recommend either.
 
-## SDK client shape — shared intent, but NOT uniform
+## SDK client shape
 
-All SDKs share the same intent: hold the proxy URL + `x-api-key` once, bind an
-Odoo instance's credentials, expose one method per allowed action, and turn
-JSON-RPC errors into typed exceptions (preserving code/message/data). **In
-practice the APIs have drifted** — class names, init patterns, method names, and
-error types differ per language, and none match the shape shown on the website's
-SDK docs. Concrete examples: `unlink` is `remove` in JS/Java/Swift; `call_method`
-is `call` in PHP; the JVM has two separate clients (`io.odxproxy` high-level vs
-`com.terrakernel` low-level); JS is the only SDK whose error class names match
-the website. **.NET breaks the shape entirely**: a Rust C-ABI native core behind
-an AOT-friendly binding, with no per-action methods — one `ExecuteAsync` plus an
-`OdxAction` enum, `params`/`keyword` supplied as raw JSON bytes, async only.
-**Always read the specific SDK's source before writing against it.**
-Full per-language APIs, a drift table, and remote git URLs are in
-`references/sdks.md`. The raw HTTP/JSON-RPC contract (`references/api-reference.md`)
-is stable regardless of SDK drift — use it for custom clients.
+All SDKs hold the proxy URL + `x-api-key` once, bind an Odoo instance, expose one method per operation, and raise typed errors keeping code/message/data. v1 APIs drifted per language (`remove` vs `unlink`, `call` vs `call_method`, snake vs camel; .NET v1 is one `ExecuteAsync` + `OdxAction` enum with raw JSON). v2 was added to all of them from one spec (`SYSTEM_ARCHITECTURE.md` §7.1 in the proxy repo) as a separate session type/namespace, keeping each SDK's v1 naming but sending identical wire JSON. JS, Java and Swift are process singletons. **Always read the specific SDK's source before writing against it**, and when an SDK releases, re-read its README and update `references/sdks.md`.

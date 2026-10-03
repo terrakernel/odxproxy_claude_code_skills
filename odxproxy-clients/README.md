@@ -8,11 +8,14 @@ It teaches Claude to:
 
 1. **Understand a target Odoo instance's data model first** — discover fields
    and relations via `fields_get` before writing a single struct/class/DTO.
-2. **Build the client** — either on an official ODXProxy SDK (Python, Java,
-   PHP, Kotlin, Swift, JavaScript/TS, .NET/C#) or a hand-rolled client against
-   the raw JSON-RPC contract.
+2. **Pick the right API version** — v1 (`/api/odoo/execute`, `execute_kw` over
+   `/jsonrpc`, any Odoo up to 21) or v2 (`/v2/odoo/execute`, Odoo JSON-2,
+   Odoo 19+ and the only option on 22+) — and use its argument shape correctly.
+3. **Build the client** — either on an official ODXProxy SDK (Python,
+   JavaScript/TS, Java/Kotlin, PHP, Swift, .NET/C#; all support v1 and v2) or a
+   hand-rolled client against the raw JSON-RPC contract.
 
-Official SDK packages: [`odxproxy`](https://github.com/terrakernel/ODXProxyClient-Python) (PyPI) ·
+Official SDK packages: [`terrakernel-odxproxyclient`](https://github.com/terrakernel/ODXProxyClient-Python) (PyPI) ·
 [`io.odxproxy:odxproxyclient-java`](https://github.com/terrakernel/ODXProxyClient-Java) ·
 [`odxproxy/client`](https://github.com/terrakernel/ODXProxyClient-PHP) (Composer) ·
 [`ODXProxyClient-Swift`](https://github.com/terrakernel/ODXProxyClient-Swift) (SwiftPM) ·
@@ -25,12 +28,12 @@ Official SDK packages: [`odxproxy`](https://github.com/terrakernel/ODXProxyClien
 | Path | Purpose |
 |------|---------|
 | `SKILL.md` | Skill entry point (name, description, mental model, workflow). Claude loads this first. |
-| `references/api-reference.md` | Full endpoint + JSON-RPC envelope contract (for custom clients). |
-| `references/actions.md` | Exact `params`/`keyword` shape for each of the 9 allowed actions. |
-| `references/errors.md` | Error-code catalog → handling strategy. |
-| `references/sdks.md` | Per-language SDK APIs, cross-SDK drift table, and remote git URLs to refresh from. |
+| `references/api-reference.md` | v1 and v2 endpoints, JSON-RPC envelope, v2 caveats (for custom clients). |
+| `references/actions.md` | v1 `params`/`keyword` per action and v2 `kwargs` per method. |
+| `references/errors.md` | Error-code catalog (both versions) → handling and retry strategy. |
+| `references/sdks.md` | Per-language SDK packages, v1 and v2 entry points, error types, and repo URLs to refresh from. |
 | `references/odoo-introspection.md` | Recipe for discovering a target Odoo's schema. |
-| `scripts/odx.py` | Zero-dependency CLI over `/api/odoo/execute` for live introspection/testing. |
+| `scripts/odx.py` | Zero-dependency CLI over the proxy (v1 by default, `--v2` for JSON-2) for live introspection/testing. |
 | `scripts/.env.example` | Config template for `odx.py` (the two distinct API keys). |
 | `CLAUDE.md` | Repo-level notes for anyone editing this skill. |
 
@@ -82,6 +85,7 @@ through it. Examples that activate it:
 - "Generate a typed TypeScript model for `res.partner` on my Odoo instance."
 - "Why am I getting error -32002 from odxproxy?"
 - "Introspect the `product.template` fields on my Odoo before we write the DAO."
+- "We're upgrading to Odoo 20 — move our ODXProxy integration to the v2 API."
 
 You can also point Claude at it explicitly: *"Use the odxproxy-clients skill to …"*.
 
@@ -94,6 +98,10 @@ Configure the two API keys and target instance, then run:
 cp scripts/.env.example scripts/.env      # then edit the values
 python3 scripts/odx.py --env-file scripts/.env fields_get res.partner
 python3 scripts/odx.py --env-file scripts/.env search_read res.partner --fields name,email --limit 5
+
+# v2 (Odoo 19+, ODXProxy 0.9.0+): same commands with --v2; ODX_ODOO_USER_ID isn't needed
+python3 scripts/odx.py --env-file scripts/.env --v2 version
+python3 scripts/odx.py --env-file scripts/.env --v2 fields_get res.partner --attrs type,string,relation
 ```
 
 The two keys are **different**: `ODX_PROXY_KEY` authenticates you to the proxy
